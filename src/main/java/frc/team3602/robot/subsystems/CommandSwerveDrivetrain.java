@@ -7,13 +7,10 @@ import java.util.function.Supplier;
 
 import com.ctre.phoenix6.SignalLogger;
 import com.ctre.phoenix6.Utils;
-import com.ctre.phoenix6.mechanisms.swerve.LegacySwerveRequest.ApplyChassisSpeeds;
-import com.ctre.phoenix6.mechanisms.swerve.LegacySwerveRequest.FieldCentric;
 import com.ctre.phoenix6.swerve.SwerveDrivetrainConstants;
 import com.ctre.phoenix6.swerve.SwerveModuleConstants;
 import com.ctre.phoenix6.swerve.SwerveRequest;
 import com.ctre.phoenix6.swerve.SwerveRequest.ApplyFieldSpeeds;
-import com.ctre.phoenix6.swerve.utility.WheelForceCalculator.Feedforwards;
 import com.pathplanner.lib.auto.AutoBuilder;
 import com.pathplanner.lib.config.PIDConstants;
 import com.pathplanner.lib.config.RobotConfig;
@@ -21,8 +18,6 @@ import com.pathplanner.lib.controllers.PPHolonomicDriveController;
 
 import edu.wpi.first.math.Matrix;
 import edu.wpi.first.math.VecBuilder;
-import edu.wpi.first.math.controller.PIDController;
-import edu.wpi.first.math.estimator.PoseEstimator;
 import edu.wpi.first.math.estimator.SwerveDrivePoseEstimator;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
@@ -33,7 +28,6 @@ import edu.wpi.first.math.numbers.N1;
 import edu.wpi.first.math.numbers.N3;
 import edu.wpi.first.math.util.Units;
 import edu.wpi.first.wpilibj.DriverStation;
-import edu.wpi.first.wpilibj.Joystick;
 import edu.wpi.first.wpilibj.DriverStation.Alliance;
 import edu.wpi.first.wpilibj.smartdashboard.Field2d;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
@@ -43,9 +37,7 @@ import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.Subsystem;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 import edu.wpi.first.wpilibj2.command.sysid.SysIdRoutine;
-import frc.team3602.robot.LimelightHelpers;
 import frc.team3602.robot.Vision;
-import frc.team3602.robot.LimelightHelpers.PoseEstimate;
 import frc.team3602.robot.generated.TunerConstants.TunerSwerveDrivetrain;
 
 /**
@@ -58,7 +50,6 @@ import frc.team3602.robot.generated.TunerConstants.TunerSwerveDrivetrain;
 public class CommandSwerveDrivetrain extends TunerSwerveDrivetrain implements Subsystem {
     private SwerveRequest.ApplyRobotSpeeds autoRobotDrive = new SwerveRequest.ApplyRobotSpeeds(); // Only for autons
     private static final double kSimLoopPeriod = 0.004; // 4 ms
-    private final SwerveRequest.FieldCentric fcDrive = new SwerveRequest.FieldCentric();
     private Notifier m_simNotifier = null;
     private double m_lastSimTime;
 
@@ -77,12 +68,8 @@ public class CommandSwerveDrivetrain extends TunerSwerveDrivetrain implements Su
     private boolean m_hasAppliedOperatorPerspective = false;
     /* Vision */
     public final Vision vision = new Vision();
-    public final TurretSubsystem turret = new TurretSubsystem();
     public final CommandXboxController joystick = new CommandXboxController(0);
-    public double turbo;
-    /* PID Controllers */
-    private final PIDController rotationController = new PIDController(.1, 0, 0.001);
-    private final PIDController yController = new PIDController(1, 0, 0.001);
+    public double turbo = 0.8;
 
     /* Swerve requests to apply during SysId characterization */
     private final SwerveRequest.SysIdSwerveTranslation m_translationCharacterization = new SwerveRequest.SysIdSwerveTranslation();
@@ -288,48 +275,35 @@ public class CommandSwerveDrivetrain extends TunerSwerveDrivetrain implements Su
         return m_sysIdRoutineToApply.dynamic(direction);
     }
 
-    double rotationSpeed;
-    boolean tv = vision.getHasTarget();
+    /**
+     * Fuses Limelight pose estimates into the drivetrain pose estimator.
+     *
+     * We only add a vision measurement when:
+     * 1) the estimate object exists, and
+     * 2) at least one AprilTag was actually seen.
+     *
+     * This prevents "empty" frames from polluting odometry.
+     */
+    private void updatePoseFromVision(double headingDeg, double headingRateDegPerSec) {
+        vision.setRobotOrientation(headingDeg, headingRateDegPerSec);
+        var megaTagLeft = vision.getLeftMegaTag2Estimate();
+        var megaTagRight = vision.getRightMegaTag2Estimate();
 
-    public double rAlignment() {
-
-        if (tv = false) {
-            return 0.3;
-        } else {
-
-            double tx = vision.getTX();
-
-            rotationSpeed = rotationController.calculate(tx, 0);
-
-            if (Math.abs(rotationSpeed) < 0.5) {
-                rotationSpeed = 0;
-            }
-
-            return rotationSpeed;
-        }
-    }
-
-    private void updatePoseFromVision() {
-        LimelightHelpers.SetRobotOrientation("limelight-left",
-                poseEstimator.getEstimatedPosition().getRotation().getDegrees(), 0, 0, 0, 0, 0);
-        LimelightHelpers.SetRobotOrientation("limelight-right",
-                poseEstimator.getEstimatedPosition().getRotation().getDegrees(), 0, 0, 0, 0, 0);
-
-        LimelightHelpers.PoseEstimate megaTagLeft = LimelightHelpers
-                .getBotPoseEstimate_wpiBlue_MegaTag2("limelight-left");
-        LimelightHelpers.PoseEstimate megaTagRight = LimelightHelpers
-                .getBotPoseEstimate_wpiBlue_MegaTag2("limelight-right");
-
+        // High theta standard deviation means trust x/y more than heading from camera.
         poseEstimator.setVisionMeasurementStdDevs(VecBuilder.fill(0.7, 0.7, 9999999));
-        if (megaTagLeft != null) {
-        poseEstimator.addVisionMeasurement(megaTagLeft.pose, megaTagLeft.timestampSeconds);
+        if (vision.isPoseEstimateUsable(megaTagLeft)) {
+            poseEstimator.addVisionMeasurement(megaTagLeft.pose, megaTagLeft.timestampSeconds);
         }
-        if (megaTagRight != null) {
-         poseEstimator.addVisionMeasurement(megaTagRight.pose, megaTagRight.timestampSeconds);
+        if (vision.isPoseEstimateUsable(megaTagRight)) {
+            poseEstimator.addVisionMeasurement(megaTagRight.pose, megaTagRight.timestampSeconds);
         }
     }
-           
 
+    /**
+     * Field target used by shooter/turret logic.
+     *
+     * TODO: Replace these placeholder coordinates with your real target locations.
+     */
     public Translation2d getTargetPose() {
         Optional<Alliance> allianceOpt = DriverStation.getAlliance();
 
@@ -373,16 +347,10 @@ public class CommandSwerveDrivetrain extends TunerSwerveDrivetrain implements Su
     public void periodic() {
         double headingDeg = this.getPigeon2().getYaw().getValueAsDouble();
         double headingRate = this.getPigeon2().getAngularVelocityZWorld().getValueAsDouble();
-        LimelightHelpers.SetRobotOrientation("limelight-right", headingDeg, headingRate, 0, 0, 0, 0);
-        LimelightHelpers.SetRobotOrientation("limelight-left", headingDeg, headingRate, 0, 0, 0, 0);
-        updatePoseFromVision();
+        updatePoseFromVision(headingDeg, headingRate);
         poseEstimator.update(getPigeon2().getRotation2d(), this.getState().ModulePositions);
         poseEstimator.getEstimatedPosition();
 
-        SmartDashboard.putNumber("Rotation Speed", this.rotationSpeed);
-        SmartDashboard.putNumber("my heading", vision.getTX());
-        SmartDashboard.putNumber("turret angle", turret.getEncoder());
-        
         field.setRobotPose(poseEstimator.getEstimatedPosition());
 
         SmartDashboard.putData("PoseVisionAbe", field);

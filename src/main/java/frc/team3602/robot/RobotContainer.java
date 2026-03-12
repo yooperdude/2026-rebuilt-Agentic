@@ -21,7 +21,6 @@ import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 import edu.wpi.first.wpilibj2.command.button.RobotModeTriggers;
 import edu.wpi.first.wpilibj2.command.button.Trigger;
 import edu.wpi.first.wpilibj2.command.sysid.SysIdRoutine.Direction;
-import frc.team3602.robot.Vision;
 import frc.team3602.robot.generated.TunerConstants;
 import frc.team3602.robot.subsystems.ClimberSubsystem;
 import frc.team3602.robot.subsystems.CommandSwerveDrivetrain;
@@ -56,9 +55,8 @@ public class RobotContainer {
 
         /* Subsystems */
         public final CommandSwerveDrivetrain drivetrain = TunerConstants.createDrivetrain();
-                public final Vision vision = new Vision();
         public final IntakeSubsystem intake = new IntakeSubsystem();
-        public final ShooterSubsystem shooter = new ShooterSubsystem(vision, drivetrain);
+        public final ShooterSubsystem shooter = new ShooterSubsystem(drivetrain);
         public final TurretSubsystem turret = new TurretSubsystem(drivetrain);
         public final SpindexerSubsystem spindexer = new SpindexerSubsystem();
         public final PivotSubsystem pivot = new PivotSubsystem();
