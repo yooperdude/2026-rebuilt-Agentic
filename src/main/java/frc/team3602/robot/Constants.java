@@ -53,6 +53,19 @@ public final class Constants {
 
         public final static double kRecieveFuelSpeed = .75;//.65
     }
+    public static final class FieldConstants {
+        // Field dimensions in feet (for easy comparison to game manual drawings).
+        public static final double kFieldLengthFeet = 54.0;
+        public static final double kFieldWidthFeet = 27.0;
+
+        // Blue-side target location in feet.
+        public static final double kBlueTargetXFeet = 25.0;
+        public static final double kBlueTargetYFeet = 13.5;
+
+        // Red-side target mirrors X across the field length, keeps the same Y.
+        public static final double kRedTargetXFeet = kFieldLengthFeet - kBlueTargetXFeet;
+        public static final double kRedTargetYFeet = kBlueTargetYFeet;
+    }
 
     
 }

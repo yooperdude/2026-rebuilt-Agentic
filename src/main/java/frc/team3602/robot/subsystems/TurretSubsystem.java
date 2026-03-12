@@ -136,6 +136,7 @@ public class TurretSubsystem extends SubsystemBase {
 
     /**
      * Robot-to-target distance in feet (for dashboard and future tuning).
+     * Watch variable distanceMeters as you are calling it as feet on the dashboard. You can change this to feet in the code if you want, just remember to update the variable name for clarity.
      */
     public double getDistanceToTarget() {
         Pose2d robotPose = drivetrainSubsys.getState().Pose;

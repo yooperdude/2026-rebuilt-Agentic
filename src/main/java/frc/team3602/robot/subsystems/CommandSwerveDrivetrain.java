@@ -37,6 +37,7 @@ import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.Subsystem;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 import edu.wpi.first.wpilibj2.command.sysid.SysIdRoutine;
+import frc.team3602.robot.Constants.FieldConstants;
 import frc.team3602.robot.Vision;
 import frc.team3602.robot.generated.TunerConstants.TunerSwerveDrivetrain;
 
@@ -302,7 +303,8 @@ public class CommandSwerveDrivetrain extends TunerSwerveDrivetrain implements Su
     /**
      * Field target used by shooter/turret logic.
      *
-     * TODO: Replace these placeholder coordinates with your real target locations.
+     * Note: Translation2d uses meters, but our constants are stored in feet,
+     * so we convert units here.
      */
     public Translation2d getTargetPose() {
         Optional<Alliance> allianceOpt = DriverStation.getAlliance();
@@ -312,14 +314,20 @@ public class CommandSwerveDrivetrain extends TunerSwerveDrivetrain implements Su
             Alliance alliance = allianceOpt.get(); // unwrap the Optional
 
             if (alliance == Alliance.Blue) {
-                return new Translation2d(0.0, 0.0); // example blue alliance target
+                return new Translation2d(
+                        Units.feetToMeters(FieldConstants.kBlueTargetXFeet),
+                        Units.feetToMeters(FieldConstants.kBlueTargetYFeet));
             } else if (alliance == Alliance.Red) {
-                return new Translation2d(1.0, 1.0); // example red alliance target
+                return new Translation2d(
+                        Units.feetToMeters(FieldConstants.kRedTargetXFeet),
+                        Units.feetToMeters(FieldConstants.kRedTargetYFeet));
             }
         }
 
-        // Fallback if alliance not present or invalid
-        return new Translation2d(0.0, 0.0);
+        // Fallback: default to blue target if alliance is unknown.
+        return new Translation2d(
+                Units.feetToMeters(FieldConstants.kBlueTargetXFeet),
+                Units.feetToMeters(FieldConstants.kBlueTargetYFeet));
     }
 
     public double getDistanceToTarget() {
